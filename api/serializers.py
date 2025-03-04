@@ -19,8 +19,8 @@ class JsonDataSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = JsonData
-        fields = ['id', 'user', 'name', 'data', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
+        fields = ['id', 'user', 'name', 'data', 'created_at', 'updated_at', 'uuid', 'is_public']
+        read_only_fields = ['id', 'user', 'created_at', 'updated_at', 'uuid']
     
     def create(self, validated_data):
         """
@@ -29,3 +29,12 @@ class JsonDataSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         validated_data['user'] = user
         return super().create(validated_data)
+
+class PublicJsonDataSerializer(serializers.ModelSerializer):
+    """
+    Serializer for publicly accessible JsonData
+    """
+    class Meta:
+        model = JsonData
+        fields = ['name', 'data', 'created_at', 'updated_at']
+        read_only_fields = ['name', 'data', 'created_at', 'updated_at']

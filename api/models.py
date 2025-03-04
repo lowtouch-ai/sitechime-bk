@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 import json
+import uuid
 
 # Create your models here.
 class JsonData(models.Model):
@@ -13,6 +14,10 @@ class JsonData(models.Model):
     data = models.JSONField(help_text="JSON data stored by the user")
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, unique=True, 
+                           help_text="UUID for public access to this data")
+    is_public = models.BooleanField(default=False, 
+                                   help_text="Whether this data is publicly accessible via UUID")
     
     class Meta:
         verbose_name = "JSON Data"
@@ -34,3 +39,17 @@ class JsonData(models.Model):
         Get the JSON data as a Python dictionary
         """
         return self.data
+    
+    def make_public(self):
+        """
+        Make this data publicly accessible via UUID
+        """
+        self.is_public = True
+        self.save()
+    
+    def make_private(self):
+        """
+        Make this data private (not accessible via UUID)
+        """
+        self.is_public = False
+        self.save()
