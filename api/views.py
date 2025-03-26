@@ -91,7 +91,7 @@ class RateLimitedProxyView(ProxyView):
     retries = 0
     add_remote_user = True
     
-    @method_decorator(ratelimit(key='user', rate='60/m', method='POST'))
+    @method_decorator(ratelimit(key='user', rate='1/m', method='POST'))
     def post(self, request, path):
         """
         Rate-limited POST requests
@@ -108,5 +108,9 @@ class OpenAIProxyView(RateLimitedProxyView):
         Add any headers needed for the OpenAI compatible server
         """
         headers = super().get_proxy_request_headers(request)
+
+        print("Headers before modification:", headers)
+
+
         # You can add any additional headers needed for your OpenAI compatible server here
         return headers
