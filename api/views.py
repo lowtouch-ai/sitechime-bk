@@ -114,6 +114,7 @@ class RateLimitedProxyView(ProxyView):
     upstream = settings.OPENAI_PROXY_URL
     retries = 0
     add_remote_user = True
+    stream = True  # Enable streaming responses
     
     @method_decorator(ratelimit(key='user', rate='1/m', method='POST'))
     def post(self, request, path):
@@ -132,6 +133,9 @@ class OpenAIProxyView(RateLimitedProxyView):
     the UUID in the 'X-JsonData-UUID' header or 'uuid' query parameter
     """
     permission_classes = [permissions.AllowAny]
+    timeout = 30  # Set timeout for upstream requests
+    retries = 1  # Allow one retry
+    chunk_size = 32  # Optimal chunk size for streaming (8KB)
     
     def dispatch(self, request, *args, **kwargs):
         """
@@ -163,6 +167,14 @@ class OpenAIProxyView(RateLimitedProxyView):
         Add any headers needed for the OpenAI compatible server
         """
         headers = super().get_proxy_request_headers(request)
+        
+        # Add headers for better streaming performance
+        headers.update({
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+            'Transfer-Encoding': 'chunked'
+        })
+        
         api_logger.debug(f"Proxy request headers: {headers}")
         return headers
 

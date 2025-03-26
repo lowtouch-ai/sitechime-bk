@@ -25,4 +25,4 @@ RUN mkdir -p logs && \
 EXPOSE 8000
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+CMD ["gunicorn", "--workers=4", "--worker-class=sync", "--timeout=120", "--keep-alive=5", "--worker-connections=1000", "--backlog=2048", "--log-level=info", "--access-logfile=-", "--error-logfile=-", "--bind=0.0.0.0:8000", "cloudcontrol_widget_backend.wsgi:application"]
