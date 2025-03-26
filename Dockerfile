@@ -14,7 +14,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN python manage.py collectstatic --noinput && \
+# Create logs directory and set permissions
+RUN mkdir -p logs && \
+    touch logs/.gitkeep && \
+    chmod -R 755 logs && \
+    chown -R www-data:www-data logs && \
+    python manage.py collectstatic --noinput && \
     chmod +x entrypoint.sh
 
 EXPOSE 8000

@@ -7,9 +7,14 @@ __pycache__
 *.sqlite3
 staticfiles
 .vscode
+.idea
 *.log
 *.pot
 *.mo
 media/
 venv/
 env/
+
+# Don't ignore the logs directory itself, but ignore its contents
+logs/*
+!logs/.gitkeep
