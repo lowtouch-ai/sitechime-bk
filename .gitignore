@@ -1,2 +1,4 @@
 ﻿*.pyc
 *.sqlite3
+.idea
+.env
