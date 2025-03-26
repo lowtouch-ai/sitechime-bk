@@ -10,8 +10,8 @@ from revproxy.views import ProxyView
 from django_ratelimit.decorators import ratelimit
 from django.utils.decorators import method_decorator
 
-from .models import JsonData
-from .serializers import JsonDataSerializer, PublicJsonDataSerializer
+from .models import JsonData, TncAcceptance
+from .serializers import JsonDataSerializer, PublicJsonDataSerializer, TncAcceptanceSerializer
 
 # Create your views here.
 class JsonDataViewSet(viewsets.ModelViewSet):
@@ -147,3 +147,93 @@ class OpenAIProxyView(RateLimitedProxyView):
 
         # You can add any additional headers needed for your OpenAI compatible server here
         return headers
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def accept_tnc(request):
+    """
+    API endpoint for recording Terms and Conditions acceptance
+    Requires config_id in request data
+    Automatically captures IP address from the request
+    """
+    # Get client IP address
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip_address = x_forwarded_for.split(',')[0]
+    else:
+        ip_address = request.META.get('REMOTE_ADDR')
+    
+    # Add IP address to request data
+    data = request.data.copy()
+    data['ip_address'] = ip_address
+    
+    # Get user agent if available
+    user_agent = request.META.get('HTTP_USER_AGENT')
+    if user_agent:
+        data['user_agent'] = user_agent
+    
+    # Validate and save
+    serializer = TncAcceptanceSerializer(data=data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(
+            {'message': 'Terms and Conditions acceptance recorded successfully'},
+            status=status.HTTP_201_CREATED
+        )
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def check_tnc_acceptance(request, config_id):
+    """
+    API endpoint to check if the current IP has accepted Terms and Conditions for a given config_id
+    """
+    # Get client IP address
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip_address = x_forwarded_for.split(',')[0]
+    else:
+        ip_address = request.META.get('REMOTE_ADDR')
+    
+    # Check if a record exists
+    try:
+        tnc_acceptance = TncAcceptance.objects.get(
+            config_id=config_id,
+            ip_address=ip_address
+        )
+        return Response({
+            'accepted': True,
+            'accepted_at': tnc_acceptance.accepted_at
+        })
+    except TncAcceptance.DoesNotExist:
+        return Response({
+            'accepted': False
+        })
+
+
+class TncAcceptanceViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for administrators to view and manage TncAcceptance records
+    """
+    queryset = TncAcceptance.objects.all()
+    serializer_class = TncAcceptanceSerializer
+    permission_classes = [permissions.IsAdminUser]  # Only admins can access this
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['config_id', 'ip_address']
+    ordering_fields = ['config_id', 'ip_address', 'accepted_at']
+    
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """
+        Return statistics about TnC acceptances
+        """
+        total_acceptances = TncAcceptance.objects.count()
+        unique_configs = TncAcceptance.objects.values('config_id').distinct().count()
+        unique_ips = TncAcceptance.objects.values('ip_address').distinct().count()
+        
+        return Response({
+            'total_acceptances': total_acceptances,
+            'unique_configs': unique_configs,
+            'unique_ips': unique_ips
+        })
