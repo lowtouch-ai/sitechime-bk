@@ -113,7 +113,7 @@ class OpenAIProxyView(RateLimitedProxyView):
         Override dispatch to handle UUID authentication before processing the request
         """
         # Try to authenticate via UUID
-        uuid_value = request.headers.get('X-JsonData-UUID') or request.GET.get('uuid')
+        uuid_value = request.headers.get('X-Config-Key') or request.GET.get('uuid')
         
         if uuid_value:
             try:
@@ -128,8 +128,11 @@ class OpenAIProxyView(RateLimitedProxyView):
                 
             except (JsonData.DoesNotExist, ValueError):
                 # If UUID is invalid or JsonData doesn't exist, continue with default authentication
-                print("Failed to authenticate via UUID")
-                pass
+                print("Failed to authenticate via UUID",uuid_value)
+
+                return HttpResponse(
+                    "Invalid Config ID", status=status.HTTP_403_FORBIDDEN
+                )
                 
         # Continue with regular dispatch
         return super().dispatch(request, *args, **kwargs)

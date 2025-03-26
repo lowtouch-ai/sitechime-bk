@@ -88,7 +88,7 @@ CORS_ALLOW_HEADERS = [
     'user-agent',
     'x-csrftoken',
     'x-requested-with',
-    'x-jsondata-uuid',  # Allow our custom header
+    'x-config-key',
 ]
 
 ROOT_URLCONF = 'cloudcontrol_widget_backend.urls'
