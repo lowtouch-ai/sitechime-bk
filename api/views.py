@@ -102,7 +102,38 @@ class RateLimitedProxyView(ProxyView):
 class OpenAIProxyView(RateLimitedProxyView):
     """
     Proxy view for OpenAI API with rate limiting
+    
+    Can authenticate users via UUID of JsonData model by providing 
+    the UUID in the 'X-JsonData-UUID' header or 'uuid' query parameter
     """
+    permission_classes = [permissions.AllowAny]
+    
+    def dispatch(self, request, *args, **kwargs):
+        """
+        Override dispatch to handle UUID authentication before processing the request
+        """
+        # Try to authenticate via UUID
+        uuid_value = request.headers.get('X-JsonData-UUID') or request.GET.get('uuid')
+        
+        if uuid_value:
+            try:
+                # Find JsonData with the provided UUID and that is public
+                json_data = JsonData.objects.get(uuid=uuid_value, is_public=True)
+                
+                # Attach the user to the request
+                request.user = json_data.user
+                
+                # Log the authentication success
+                print(f"Authenticated request as user {json_data.user.username} via JsonData UUID")
+                
+            except (JsonData.DoesNotExist, ValueError):
+                # If UUID is invalid or JsonData doesn't exist, continue with default authentication
+                print("Failed to authenticate via UUID")
+                pass
+                
+        # Continue with regular dispatch
+        return super().dispatch(request, *args, **kwargs)
+    
     def get_proxy_request_headers(self, request):
         """
         Add any headers needed for the OpenAI compatible server
@@ -110,7 +141,6 @@ class OpenAIProxyView(RateLimitedProxyView):
         headers = super().get_proxy_request_headers(request)
 
         print("Headers before modification:", headers)
-
 
         # You can add any additional headers needed for your OpenAI compatible server here
         return headers
