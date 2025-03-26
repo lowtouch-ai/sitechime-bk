@@ -67,8 +67,6 @@ class TncAcceptance(models.Model):
         verbose_name = "TnC Acceptance"
         verbose_name_plural = "TnC Acceptances"
         ordering = ['-accepted_at']
-        # Ensure uniqueness for config_id and IP address combination
-        unique_together = ['config_id', 'ip_address']
     
     def __str__(self):
         return f"TnC Acceptance: {self.config_id} from {self.ip_address} at {self.accepted_at}"
