@@ -1,0 +1,20 @@
+.git
+.gitignore
+.env
+*.pyc
+__pycache__
+.pytest_cache
+*.sqlite3
+staticfiles
+.vscode
+.idea
+*.log
+*.pot
+*.mo
+media/
+venv/
+env/
+
+# Don't ignore the logs directory itself, but ignore its contents
+logs/*
+!logs/.gitkeep
