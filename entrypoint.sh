@@ -15,6 +15,7 @@ fi
 # Apply database migrations
 echo "Applying database migrations..."
 python manage.py migrate
+python manage.py collectstatic --noinput
 
 # Create superuser if DJANGO_SUPERUSER_* environment variables are set
 if [ -n "$DJANGO_SUPERUSER_USERNAME" ] && [ -n "$DJANGO_SUPERUSER_PASSWORD" ] && [ -n "$DJANGO_SUPERUSER_EMAIL" ]
