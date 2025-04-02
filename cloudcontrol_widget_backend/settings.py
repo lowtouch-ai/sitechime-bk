@@ -290,3 +290,6 @@ LOGGING = {
 
 # OpenAI proxy settings
 OPENAI_PROXY_URL = os.environ.get('OPENAI_PROXY_URL', 'http://192.168.0.34:1234')
+
+# API token for authentication
+OPENWEBUI_API_TOKEN = os.environ.get('OPENWEBUI_API_TOKEN')

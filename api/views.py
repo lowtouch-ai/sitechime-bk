@@ -133,7 +133,7 @@ class OpenAIProxyView(RateLimitedProxyView):
     the UUID in the 'X-JsonData-UUID' header or 'uuid' query parameter
     """
     permission_classes = [permissions.AllowAny]
-    timeout = 30  # Set timeout for upstream requests
+    timeout = 3000000  # Set timeout for upstream requests
     retries = 1  # Allow one retry
     chunk_size = 32  # Optimal chunk size for streaming (8KB)
     
@@ -143,8 +143,16 @@ class OpenAIProxyView(RateLimitedProxyView):
         """
         # Try to authenticate via UUID
         uuid_value = request.headers.get('X-Config-Key') or request.GET.get('uuid')
+
+        # Add authorization token from settings
+        token = settings.OPENWEBUI_API_TOKEN
+
+        if token:
+            request.META['HTTP_AUTHORIZATION'] = f'Bearer {token}'
+            api_logger.debug(f"Authorization token added to request headers")
+
         
-        if uuid_value:
+        if uuid_value:#remove this to enable uuid authentication
             try:
                 # Find JsonData with the provided UUID and that is public
                 json_data = JsonData.objects.get(uuid=uuid_value, is_public=True)
