@@ -2,8 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     JsonDataViewSet, OpenAIProxyView, public_json_data, 
-    TncAcceptanceViewSet, accept_tnc, check_tnc_acceptance,
-    convert_json_to_yaml, convert_yaml_to_json
+    TncAcceptanceViewSet, accept_tnc, check_tnc_acceptance
 )
 
 # Create a router and register our viewsets with it
@@ -23,6 +22,5 @@ urlpatterns = [
     # OpenAI proxy endpoints
     path('openai/<path:path>', OpenAIProxyView.as_view(), name='openai-proxy'),
     # Format conversion endpoints
-    path('convert/json-to-yaml/', convert_json_to_yaml, name='convert-json-to-yaml'),
-    path('convert/yaml-to-json/', convert_yaml_to_json, name='convert-yaml-to-json'),
+    path('convert/', include('api.converters.urls')),
 ]
