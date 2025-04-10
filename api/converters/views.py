@@ -15,17 +15,17 @@ from utils.logger import api_logger
 from utils.converters import json_to_yaml, yaml_to_json
 
 
-@api_view(['POST'])
+@api_view(['GET'])
 @permission_classes([AllowAny])
 def convert_json_to_yaml(request):
     """
     API endpoint to convert JSON file to YAML format
-    Requires a URL to a JSON file in the request data
+    Requires a URL to a JSON file as a query parameter
     Returns the converted YAML as a downloadable file
     Results are cached for improved performance
     """
-    # Get the URL from the request data
-    url = request.data.get('url')
+    # Get the URL from the query parameters
+    url = request.GET.get('url')
     if not url:
         api_logger.warning(f"JSON to YAML conversion attempt without URL")
         return Response(
@@ -89,17 +89,17 @@ def convert_json_to_yaml(request):
         )
 
 
-@api_view(['POST'])
+@api_view(['GET'])
 @permission_classes([AllowAny])
 def convert_yaml_to_json(request):
     """
     API endpoint to convert YAML file to JSON format
-    Requires a URL to a YAML file in the request data
+    Requires a URL to a YAML file as a query parameter
     Returns the converted JSON as a downloadable file
     Results are cached for improved performance
     """
-    # Get the URL from the request data
-    url = request.data.get('url')
+    # Get the URL from the query parameters
+    url = request.GET.get('url')
     if not url:
         api_logger.warning(f"YAML to JSON conversion attempt without URL")
         return Response(
