@@ -1,6 +1,8 @@
 from django.shortcuts import render, get_object_or_404
 from django.conf import settings
-from django.http import HttpResponse
+from django.http import HttpResponse, StreamingHttpResponse
+import json
+import os
 
 from rest_framework import viewsets, filters, permissions, status
 from rest_framework.decorators import action, api_view, permission_classes
@@ -131,6 +133,8 @@ class OpenAIProxyView(RateLimitedProxyView):
     
     Can authenticate users via UUID of JsonData model by providing 
     the UUID in the 'X-JsonData-UUID' header or 'uuid' query parameter
+    
+    If BENCHMARK_MODE=1 is set in environment, returns static responses without making proxy calls
     """
     permission_classes = [permissions.AllowAny]
     timeout = 3000000  # Set timeout for upstream requests
@@ -141,6 +145,13 @@ class OpenAIProxyView(RateLimitedProxyView):
         """
         Override dispatch to handle UUID authentication before processing the request
         """
+        # Check if benchmark mode is enabled
+        benchmark_mode = settings.BENCHMARK_MODE
+        
+        if benchmark_mode and request.method == 'POST':
+            api_logger.info("Benchmark mode is enabled, returning static response")
+            return self.get_benchmark_response(request, *args, **kwargs)
+            
         # Try to authenticate via UUID
         uuid_value = request.headers.get('X-Config-Key') or request.GET.get('uuid')
 
@@ -169,6 +180,70 @@ class OpenAIProxyView(RateLimitedProxyView):
         
         # Continue with regular dispatch
         return super().dispatch(request, *args, **kwargs)
+    
+    def get_benchmark_response(self, request, *args, **kwargs):
+        """
+        Return a static response for benchmark mode
+        """
+        try:
+            # Parse the request body to determine the response format
+            request_body = json.loads(request.body)
+            
+            # Check if streaming is requested
+            stream = request_body.get('stream', False)
+            
+            if stream:
+                # Create a streaming response for chat completions
+                def stream_response():
+                    # Initial response chunk
+                    yield b'data: {"id":"chatcmpl-benchmark","object":"chat.completion.chunk","created":1699000000,"model":"benchmark-model","system_fingerprint":"benchmark","choices":[{"index":0,"delta":{"role":"assistant"},"logprobs":null,"finish_reason":null}]}\n\n'
+                    
+                    # Content chunks
+                    message = "This is a benchmark response. No actual API call was made."
+                    for word in message.split():
+                        yield f'data: {{"id":"chatcmpl-benchmark","object":"chat.completion.chunk","created":1699000000,"model":"benchmark-model","choices":[{{"index":0,"delta":{{"content":" {word}"}},"logprobs":null,"finish_reason":null}}]}}\n\n'.encode('utf-8')
+                        
+                    # Final chunk
+                    yield b'data: {"id":"chatcmpl-benchmark","object":"chat.completion.chunk","created":1699000000,"model":"benchmark-model","choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"stop"}]}\n\n'
+                    yield b'data: [DONE]\n\n'
+                
+                return StreamingHttpResponse(
+                    streaming_content=stream_response(),
+                    content_type='text/event-stream'
+                )
+            else:
+                # Create a non-streaming response
+                response_data = {
+                    "id": "chatcmpl-benchmark",
+                    "object": "chat.completion",
+                    "created": 1699000000,
+                    "model": "benchmark-model",
+                    "system_fingerprint": "benchmark",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": "This is a benchmark response. No actual API call was made."
+                            },
+                            "logprobs": None,
+                            "finish_reason": "stop"
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 12,
+                        "total_tokens": 22
+                    }
+                }
+                return Response(response_data)
+        
+        except Exception as e:
+            api_logger.error(f"Error in benchmark response: {str(e)}")
+            return Response(
+                {"error": "Failed to generate benchmark response"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     def get_proxy_request_headers(self, request):
         """
