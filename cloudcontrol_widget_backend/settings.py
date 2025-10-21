@@ -101,6 +101,10 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
     'x-config-key',
+    # Allow external client-originated headers used for tenant/context propagation
+    'x-ltai-ext-apexaiq-api-token',
+    'x-ltai-ext-client-id',
+    'x-ltai-ext-session-context',
 ]
 
 ROOT_URLCONF = 'cloudcontrol_widget_backend.urls'

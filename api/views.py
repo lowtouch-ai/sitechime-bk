@@ -258,7 +258,25 @@ class OpenAIProxyView(RateLimitedProxyView):
             'Transfer-Encoding': 'chunked'
         })
         
-        api_logger.debug(f"Proxy request headers: {headers}")
+        # Forward any external client-originated headers that are intended for
+        # context propagation to the agent/upstream. These headers are expected
+        # to be prefixed with X-LTAI-EXT- by convention and are whitelisted
+        # (see settings.CORS_ALLOW_HEADERS).
+        forwarded = []
+        try:
+            for hname, hval in request.headers.items():
+                if hname.lower().startswith('x-ltai-ext-'):
+                    # Add header as-is to upstream request
+                    headers[hname] = hval
+                    forwarded.append(hname)
+        except Exception as e:
+            api_logger.exception('Error while extracting X-LTAI-EXT headers: %s', e)
+
+        if forwarded:
+            # Log only the header names for auditing; do NOT log sensitive values
+            security_logger.info(f"Forwarding external headers to upstream: {forwarded} for path {request.path}")
+
+        api_logger.debug(f"Proxy request headers: {list(headers.keys())}")
         return headers
 
 
