@@ -139,7 +139,7 @@ class OpenAIProxyView(RateLimitedProxyView):
     permission_classes = [permissions.AllowAny]
     timeout = 3000000  # Set timeout for upstream requests
     retries = 1  # Allow one retry
-    chunk_size = 32  # Optimal chunk size for streaming (8KB)
+    chunk_size = 1024  # Optimal chunk size for streaming (8KB)
     
     def dispatch(self, request, *args, **kwargs):
         """
