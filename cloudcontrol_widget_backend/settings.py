@@ -102,7 +102,7 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
     'x-config-key',
     # Allow external client-originated headers used for tenant/context propagation
-    'x-ltai-ext-auth-token',
+    'x-ltai-ext-api-token',
     'x-ltai-ext-client-id',
     'x-ltai-ext-session-context',
 ]
