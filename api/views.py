@@ -154,6 +154,12 @@ class OpenAIProxyView(RateLimitedProxyView):
             
         # Try to authenticate via UUID
         uuid_value = request.headers.get('X-Config-Key') or request.GET.get('uuid')
+        
+        # Fallback: check Authorization header for the UUID if it's a Bearer token
+        if not uuid_value:
+            auth_header = request.headers.get('Authorization', '')
+            if auth_header.startswith('Bearer '):
+                uuid_value = auth_header.split(' ')[1]
 
         # Add authorization token from settings
         token = settings.OPENWEBUI_API_TOKEN
