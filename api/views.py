@@ -12,8 +12,8 @@ from revproxy.views import ProxyView
 from django_ratelimit.decorators import ratelimit
 from django.utils.decorators import method_decorator
 
-from .models import JsonData, TncAcceptance
-from .serializers import JsonDataSerializer, PublicJsonDataSerializer, TncAcceptanceSerializer
+from .models import JsonData
+from .serializers import JsonDataSerializer, PublicJsonDataSerializer
 from utils.logger import api_logger, security_logger
 
 # Create your views here.
@@ -199,57 +199,70 @@ class OpenAIProxyView(RateLimitedProxyView):
             stream = request_body.get('stream', False)
             
             if stream:
-                # Create a streaming response for chat completions
-                def stream_response():
-                    # Initial response chunk
-                    yield b'data: {"id":"chatcmpl-benchmark","object":"chat.completion.chunk","created":1699000000,"model":"benchmark-model","system_fingerprint":"benchmark","choices":[{"index":0,"delta":{"role":"assistant"},"logprobs":null,"finish_reason":null}]}\n\n'
-                    
-                    # Content chunks
-                    message = "This is a benchmark response. No actual API call was made."
-                    for word in message.split():
-                        yield f'data: {{"id":"chatcmpl-benchmark","object":"chat.completion.chunk","created":1699000000,"model":"benchmark-model","choices":[{{"index":0,"delta":{{"content":" {word}"}},"logprobs":null,"finish_reason":null}}]}}\n\n'.encode('utf-8')
-                        
-                    # Final chunk
-                    yield b'data: {"id":"chatcmpl-benchmark","object":"chat.completion.chunk","created":1699000000,"model":"benchmark-model","choices":[{"index":0,"delta":{},"logprobs":null,"finish_reason":"stop"}]}\n\n'
-                    yield b'data: [DONE]\n\n'
-                
+                # Return a streaming response
                 return StreamingHttpResponse(
-                    streaming_content=stream_response(),
+                    self.benchmark_stream_generator(),
                     content_type='text/event-stream'
                 )
             else:
-                # Create a non-streaming response
-                response_data = {
+                # Return a regular JSON response
+                return Response({
                     "id": "chatcmpl-benchmark",
                     "object": "chat.completion",
-                    "created": 1699000000,
+                    "created": 123456789,
                     "model": "benchmark-model",
-                    "system_fingerprint": "benchmark",
                     "choices": [
                         {
                             "index": 0,
                             "message": {
                                 "role": "assistant",
-                                "content": "This is a benchmark response. No actual API call was made."
+                                "content": "This is a benchmark response from the proxy backend."
                             },
-                            "logprobs": None,
                             "finish_reason": "stop"
                         }
                     ],
                     "usage": {
                         "prompt_tokens": 10,
-                        "completion_tokens": 12,
-                        "total_tokens": 22
+                        "completion_tokens": 10,
+                        "total_tokens": 20
                     }
-                }
-                return Response(response_data)
-        
+                })
         except Exception as e:
-            api_logger.error(f"Error in benchmark response: {str(e)}")
+            api_logger.error(f"Error generating benchmark response: {str(e)}")
             return Response(
                 {"error": "Failed to generate benchmark response"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+            
+    def benchmark_stream_generator(self):
+        """
+        Generator for benchmark streaming response
+        """
+        chunks = [
+            "This ", "is ", "a ", "benchmark ", "streaming ", "response ", "from ", "the ", "proxy ", "backend."
+        ]
+        
+        for i, chunk in enumerate(chunks):
+            data = {
+                "id": "chatcmpl-benchmark",
+                "object": "chat.completion.chunk",
+                "created": 123456789,
+                "model": "benchmark-model",
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "content": chunk
+                        },
+                        "finish_reason": None if i < len(chunks) - 1 else "stop"
+                    }
+                ]
+            }
+            yield f"data: {json.dumps(data)}\n\n"
+            import time
+            time.sleep(0.1)  # Simulate network delay
+            
+        yield "data: [DONE]\n\n"
     
     def get_proxy_request_headers(self, request):
         """
@@ -284,110 +297,3 @@ class OpenAIProxyView(RateLimitedProxyView):
 
         api_logger.debug(f"Proxy request headers: {list(headers.keys())}")
         return headers
-
-
-@api_view(['POST'])
-@permission_classes([permissions.AllowAny])
-def accept_tnc(request):
-    """
-    API endpoint for recording Terms and Conditions acceptance
-    Requires config_id in request data
-    Automatically captures IP address from the request
-    """
-    # Get client IP address
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        ip_address = x_forwarded_for.split(',')[0]
-    else:
-        ip_address = request.META.get('REMOTE_ADDR')
-    
-    # Add IP address to request data
-    data = request.data.copy()
-    data['ip_address'] = ip_address
-    
-    # Get user agent if available
-    user_agent = request.META.get('HTTP_USER_AGENT')
-    if user_agent:
-        data['user_agent'] = user_agent
-    
-    # Validate and save
-    serializer = TncAcceptanceSerializer(data=data)
-    if serializer.is_valid():
-        instance = serializer.save()
-        api_logger.info(f"Terms and Conditions accepted for config_id {instance.config_id} from IP {ip_address}")
-        return Response(
-            {'message': 'Terms and Conditions acceptance recorded successfully'},
-            status=status.HTTP_201_CREATED
-        )
-    api_logger.warning(f"Invalid T&C acceptance attempt from IP {ip_address}: {serializer.errors}")
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-@api_view(['GET'])
-@permission_classes([permissions.AllowAny])
-def check_tnc_acceptance(request, config_id):
-    """
-    API endpoint to check if the current IP has accepted Terms and Conditions for a given config_id
-    """
-    # Get client IP address
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        ip_address = x_forwarded_for.split(',')[0]
-    else:
-        ip_address = request.META.get('REMOTE_ADDR')
-    
-    # Check if a record exists
-    try:
-        tnc_acceptance = TncAcceptance.objects.get(
-            config_id=config_id,
-            ip_address=ip_address
-        )
-        api_logger.debug(f"T&C acceptance found for config_id {config_id} from IP {ip_address}")
-        return Response({
-            'accepted': True,
-            'accepted_at': tnc_acceptance.accepted_at
-        })
-    except TncAcceptance.DoesNotExist:
-        api_logger.debug(f"No T&C acceptance found for config_id {config_id} from IP {ip_address}")
-        return Response({
-            'accepted': False
-        })
-
-
-class TncAcceptanceViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for administrators to view and manage TncAcceptance records
-    """
-    queryset = TncAcceptance.objects.all()
-    serializer_class = TncAcceptanceSerializer
-    permission_classes = [permissions.IsAdminUser]  # Only admins can access this
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['config_id', 'ip_address']
-    ordering_fields = ['config_id', 'ip_address', 'accepted_at']
-    
-    def list(self, request, *args, **kwargs):
-        """Override list to add logging"""
-        response = super().list(request, *args, **kwargs)
-        api_logger.info(f"TncAcceptance records listed by admin user {request.user.username}")
-        return response
-
-    def perform_destroy(self, instance):
-        """Override perform_destroy to add logging"""
-        api_logger.info(f"TncAcceptance record deleted by admin {self.request.user.username}: config_id={instance.config_id}, ip={instance.ip_address}")
-        instance.delete()
-    
-    @action(detail=False, methods=['get'])
-    def stats(self, request):
-        """
-        Return statistics about TnC acceptances
-        """
-        total_acceptances = TncAcceptance.objects.count()
-        unique_configs = TncAcceptance.objects.values('config_id').distinct().count()
-        unique_ips = TncAcceptance.objects.values('ip_address').distinct().count()
-        
-        api_logger.info(f"TncAcceptance stats retrieved by admin {request.user.username}")
-        return Response({
-            'total_acceptances': total_acceptances,
-            'unique_configs': unique_configs,
-            'unique_ips': unique_ips
-        })
