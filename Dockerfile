@@ -20,8 +20,8 @@ RUN dos2unix entrypoint.sh && \
     mkdir -p logs && \
     chmod -R 755 logs
 
-EXPOSE 8000
+EXPOSE 8001
 
 # Use shell form instead of exec form for entrypoint to ensure proper execution
 ENTRYPOINT ["/bin/sh", "/app/entrypoint.sh"]
-CMD ["gunicorn", "--workers=4", "--bind=0.0.0.0:8000", "cloudcontrol_widget_backend.wsgi:application"]
+CMD ["gunicorn", "--workers=4", "--bind=0.0.0.0:8001", "cloudcontrol_widget_backend.wsgi:application"]
