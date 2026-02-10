@@ -62,7 +62,7 @@ Four auth methods configured: JWT (60-min access tokens via simplejwt), Session,
 - **User-scoped data**: `JsonDataViewSet.get_queryset()` filters to `request.user` — users only see their own data
 - **OpenAI proxy**: `OpenAIProxyView` streams responses from `OPENAI_PROXY_URL` with `OPENWEBUI_API_TOKEN`, forwards `X-LTAI-EXT-*` headers upstream, supports `BENCHMARK_MODE` for static test responses
 - **Rate limiting**: django-ratelimit with Redis backend; OpenAI proxy limited to 1 req/min per user on POST
-- **CORS**: Currently allows all origins with custom `X-LTAI-EXT-*` headers exposed
+- **CORS**: Allows all origins. `X-LTAI-EXT-*` headers are dynamically allowed via `DynamicExtHeaderCorsMiddleware` (`api/middleware.py`) — any header matching the `x-ltai-ext-*` prefix is automatically permitted in CORS preflight without needing to be listed in `CORS_ALLOW_HEADERS`. This middleware must remain **before** `CorsMiddleware` in the `MIDDLEWARE` stack.
 - **Logging**: Separate rotating log files in `logs/` — django.log, security.log, db.log (10MB max, 5 backups)
 
 ### URL structure
