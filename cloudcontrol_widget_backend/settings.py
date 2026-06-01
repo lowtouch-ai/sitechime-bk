@@ -308,3 +308,23 @@ OPENWEBUI_API_TOKEN = os.environ.get('OPENWEBUI_API_TOKEN')
 # Benchmark mode for testing
 # When set to 1, OpenAIProxyView will return static responses instead of making real API calls
 BENCHMARK_MODE = os.environ.get('BENCHMARK_MODE', '0') == '1'
+
+# Reverse proxy session token validation
+# Set PROXY_TOKEN_VALIDATION_ENABLED=1 to activate. Off by default so existing deployments are unaffected.
+PROXY_TOKEN_VALIDATION_ENABLED = os.environ.get('PROXY_TOKEN_VALIDATION_ENABLED', '0') == '1'
+# Strategy: "jwt_local" (verify JWT signature locally using JWKS),
+#           "oidc_introspect" (call OIDC introspection endpoint per request),
+#           "none" (always pass — for local dev with validation enabled)
+PROXY_TOKEN_VALIDATION_STRATEGY = os.environ.get('PROXY_TOKEN_VALIDATION_STRATEGY', 'jwt_local')
+# "closed" = reject on validator error (safe default), "open" = allow on error
+PROXY_TOKEN_VALIDATION_FAILURE_MODE = os.environ.get('PROXY_TOKEN_VALIDATION_FAILURE_MODE', 'closed')
+
+# OIDC / JWT settings (used by token_validator.py)
+OIDC_JWKS_URI = os.environ.get('OIDC_JWKS_URI', '')
+OIDC_JWT_SECRET = os.environ.get('OIDC_JWT_SECRET', '')  # HS256 fallback (dev/test only)
+OIDC_JWT_AUDIENCE = [a.strip() for a in os.environ.get('OIDC_JWT_AUDIENCE', '').split(',') if a.strip()] or None
+OIDC_JWT_ISSUER = os.environ.get('OIDC_JWT_ISSUER', '') or None
+
+OIDC_INTROSPECTION_ENDPOINT = os.environ.get('OIDC_INTROSPECTION_ENDPOINT', '')
+OIDC_CLIENT_ID = os.environ.get('OIDC_CLIENT_ID', '')
+OIDC_CLIENT_SECRET = os.environ.get('OIDC_CLIENT_SECRET', '')
