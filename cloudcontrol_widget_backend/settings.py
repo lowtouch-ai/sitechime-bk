@@ -321,10 +321,18 @@ PROXY_TOKEN_VALIDATION_FAILURE_MODE = os.environ.get('PROXY_TOKEN_VALIDATION_FAI
 
 # OIDC / JWT settings (used by token_validator.py)
 OIDC_JWKS_URI = os.environ.get('OIDC_JWKS_URI', '')
-OIDC_JWT_SECRET = os.environ.get('OIDC_JWT_SECRET', '')  # HS256 fallback (dev/test only)
+# OIDC_JWT_SECRET: shared secret for HS256 validation on an internal-only path.
+# This is ONLY used when OIDC_JWKS_URI is NOT set. When a JWKS URI is configured,
+# the jwt_local strategy uses asymmetric algorithms exclusively and this value is ignored.
+# Do NOT use for OIDC provider tokens — use OIDC_JWKS_URI for that.
+OIDC_JWT_SECRET = os.environ.get('OIDC_JWT_SECRET', '')
 OIDC_JWT_AUDIENCE = [a.strip() for a in os.environ.get('OIDC_JWT_AUDIENCE', '').split(',') if a.strip()] or None
 OIDC_JWT_ISSUER = os.environ.get('OIDC_JWT_ISSUER', '') or None
+# How long to cache JWKS keys before re-fetching (seconds). Default: 900 (15 min).
+OIDC_JWKS_CACHE_TTL_SECONDS = int(os.environ.get('OIDC_JWKS_CACHE_TTL_SECONDS', 900))
 
 OIDC_INTROSPECTION_ENDPOINT = os.environ.get('OIDC_INTROSPECTION_ENDPOINT', '')
+# Timeout in seconds for the OIDC introspection endpoint request. Default: 5.
+OIDC_INTROSPECTION_TIMEOUT_SECONDS = int(os.environ.get('OIDC_INTROSPECTION_TIMEOUT_SECONDS', 5))
 OIDC_CLIENT_ID = os.environ.get('OIDC_CLIENT_ID', '')
 OIDC_CLIENT_SECRET = os.environ.get('OIDC_CLIENT_SECRET', '')
