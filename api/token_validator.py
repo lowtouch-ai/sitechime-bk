@@ -11,17 +11,19 @@ Two strategies are supported, selected by PROXY_TOKEN_VALIDATION_STRATEGY:
 
 import threading
 import time
-import logging
 
 from django.conf import settings
-
-security_logger = logging.getLogger('django.security')
+from utils.logger import security_logger
 
 # ---------------------------------------------------------------------------
 # JWKS cache (used by JwtLocalValidator)
 # ---------------------------------------------------------------------------
 _jwks_cache: dict = {}
 _jwks_lock = threading.Lock()
+# Per-URI refresh locks prevent a thundering herd when many concurrent requests
+# all miss on the same unknown kid — only one thread fetches while others wait.
+_jwks_fetch_locks: dict = {}
+_jwks_fetch_locks_lock = threading.Lock()
 
 # Asymmetric algorithms only — HMAC variants must NOT appear here.
 # Mixing HS256 with a JWKS public key enables the classic algorithm-confusion
@@ -71,6 +73,15 @@ def _validate_jwt_local(token: str) -> tuple:
     audience = getattr(settings, 'OIDC_JWT_AUDIENCE', None)
     issuer = getattr(settings, 'OIDC_JWT_ISSUER', None)
 
+    if not audience:
+        # Without OIDC_JWT_AUDIENCE, tokens from other services on the same issuer
+        # will be accepted (cross-service token reuse). Set OIDC_JWT_AUDIENCE in
+        # production to enforce audience binding.
+        security_logger.warning(
+            "OIDC_JWT_AUDIENCE is not configured — audience verification is disabled. "
+            "Set OIDC_JWT_AUDIENCE to prevent cross-service token acceptance."
+        )
+
     common_decode_opts = {
         # Skip audience verification when OIDC_JWT_AUDIENCE is not configured —
         # PyJWT 2.x rejects tokens that contain an aud claim unless you explicitly
@@ -101,11 +112,19 @@ def _validate_jwt_local(token: str) -> tuple:
         # Pick the matching key (or try all if no kid)
         candidates = [k for k in keys if not kid or k.get('kid') == kid]
         if not candidates:
-            # Refresh cache once — handles mid-rotation key rollover gracefully
-            with _jwks_lock:
-                if jwks_uri in _jwks_cache:
-                    del _jwks_cache[jwks_uri]
-            keys = _get_jwks_keys(jwks_uri)
+            # Refresh cache once for mid-rotation key rollover. Use a per-URI
+            # lock so only one thread fetches — others wait and reuse the result,
+            # preventing a thundering herd when many requests arrive with an
+            # unknown kid simultaneously.
+            with _jwks_fetch_locks_lock:
+                if jwks_uri not in _jwks_fetch_locks:
+                    _jwks_fetch_locks[jwks_uri] = threading.Lock()
+                fetch_lock = _jwks_fetch_locks[jwks_uri]
+            with fetch_lock:
+                with _jwks_lock:
+                    if jwks_uri in _jwks_cache:
+                        del _jwks_cache[jwks_uri]
+                keys = _get_jwks_keys(jwks_uri)
             candidates = [k for k in keys if not kid or k.get('kid') == kid]
 
         if not candidates:
