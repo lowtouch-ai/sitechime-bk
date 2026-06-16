@@ -151,7 +151,32 @@ class OpenAIProxyView(RateLimitedProxyView):
         if benchmark_mode and request.method == 'POST':
             api_logger.info("Benchmark mode is enabled, returning static response")
             return self.get_benchmark_response(request, *args, **kwargs)
-            
+
+        # Validate session token from host application
+        if settings.PROXY_TOKEN_VALIDATION_ENABLED:
+            from .token_validator import validate_ext_api_token
+            from django.http import JsonResponse
+            if settings.PROXY_TOKEN_VALIDATION_STRATEGY == 'none':
+                # Let validate_ext_api_token handle the none strategy so the
+                # "disabled in production" warning always fires when ENABLED=1.
+                validate_ext_api_token('')
+            else:
+                raw_token = request.headers.get('X-LTAI-EXT-API-TOKEN', '').strip()
+                if not raw_token:
+                    security_logger.warning(f"Proxy auth: missing X-LTAI-EXT-API-TOKEN for {request.path}")
+                    return JsonResponse(
+                        {"error": "Unauthorized", "detail": "Missing session token."},
+                        status=401
+                    )
+                valid, reason = validate_ext_api_token(raw_token)
+                if not valid:
+                    security_logger.warning(f"Proxy auth: rejected token for {request.path}, reason={reason}")
+                    return JsonResponse(
+                        {"error": "Unauthorized", "detail": "Invalid or expired session token."},
+                        status=401
+                    )
+                security_logger.info(f"Proxy auth: token accepted for {request.path}")
+
         # Try to authenticate via UUID
         uuid_value = request.headers.get('X-Config-Key') or request.GET.get('uuid')
         

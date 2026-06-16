@@ -86,3 +86,58 @@ Four auth methods configured: JWT (60-min access tokens via simplejwt), Session,
 - **Networking**: The web container uses host networking (`network_mode: "host"`). It reaches PostgreSQL and Redis via `localhost` through their host port mappings (PostgreSQL on 5432, Redis on 6379). Gunicorn binds to port 8001 (port 8000 is taken by `agentconnector`).
 - **entrypoint.sh**: Waits for PostgreSQL, runs migrations, collectstatic, creates superuser if env vars set, then starts Gunicorn with 4 workers
 - **PostgreSQL compatibility**: Django is pinned to `>=5.1.6,<5.2` because the `agentconnector` container runs PostgreSQL 13 (Django 5.2+ requires PostgreSQL 14).
+
+## Reverse Proxy Session Token Validation
+
+The Django `OpenAIProxyView` validates the host application's OIDC session token before forwarding any request to the AI backend. This is the security choke point — all widget chat requests pass through here.
+
+### How it works
+
+The host application extracts its OIDC access token from `sessionStorage` and passes it as `X-LTAI-EXT-API-TOKEN` on every request. The proxy validates that token before forwarding:
+
+```
+Host App → X-LTAI-EXT-API-TOKEN header → Django proxy → validate → AI backend
+```
+
+### Key files
+
+- **`api/token_validator.py`** — core validation module. Two strategies:
+  - `jwt_local` — verifies JWT signature offline using JWKS public keys (cached 15 min). No per-request network call.
+  - `oidc_introspect` — calls RFC 7662 introspection endpoint per request. Detects revoked tokens.
+  - `none` — always passes (local dev without an OIDC provider).
+- **`api/views.py`** — `OpenAIProxyView.dispatch()` calls the validator after benchmark mode check, before UUID auth.
+
+### Environment variables
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `PROXY_TOKEN_VALIDATION_ENABLED` | `0` | Master switch — set to `1` to enable |
+| `PROXY_TOKEN_VALIDATION_STRATEGY` | `jwt_local` | `jwt_local`, `oidc_introspect`, or `none` |
+| `PROXY_TOKEN_VALIDATION_FAILURE_MODE` | `closed` | `closed` = reject on validator error; `open` = allow |
+| `OIDC_JWKS_URI` | — | Auth provider's JWKS public key endpoint |
+| `OIDC_JWT_ISSUER` | — | Expected `iss` claim in the token |
+| `OIDC_JWT_AUDIENCE` | — | Expected `aud` claim (optional) |
+| `OIDC_INTROSPECTION_ENDPOINT` | — | For `oidc_introspect` strategy only |
+
+### Example config (OIDC provider)
+
+```
+PROXY_TOKEN_VALIDATION_ENABLED=1
+PROXY_TOKEN_VALIDATION_STRATEGY=jwt_local
+OIDC_JWKS_URI=https://<your-auth-provider>/.well-known/jwks.json
+OIDC_JWT_ISSUER=https://<your-auth-provider>/
+```
+
+The JWKS URI can be discovered from the provider's OpenID Connect discovery document at `<issuer>/.well-known/openid-configuration`. Ensure the token signing algorithm matches a key in the JWKS (e.g. RS256).
+
+### Testing
+
+1. Obtain a valid access token from the host application's session storage
+2. `curl -s -w "\nHTTP %{http_code}" -X POST http://127.0.0.1:8001/api/openai/api/chat/completions -H "X-LTAI-EXT-API-TOKEN: <token>" -H "X-Config-Key: test" -H "Content-Type: application/json" -d '{"model":"test","messages":[{"role":"user","content":"hi"}]}'`
+3. Check `docker exec sitechime-bk-web-1 tail -10 /app/logs/security.log` for results
+
+### No-break guarantee
+
+- `PROXY_TOKEN_VALIDATION_ENABLED` defaults to `0` — existing deployments unaffected until opted in
+- Benchmark mode short-circuits before the validation gate
+- Strategy `none` available for local dev
